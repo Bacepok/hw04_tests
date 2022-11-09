@@ -1,9 +1,10 @@
-from posts.forms import PostForm
-from posts.models import Group, Post
+from http import HTTPStatus
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
+from posts.models import Group, Post
 
 User = get_user_model()
 
@@ -24,7 +25,6 @@ class PostCreateFormTests(TestCase):
             author=cls.user,
             group=cls.group,
         )
-        cls.form = PostForm()
 
     def setUp(self):
         self.guest_client = Client()
@@ -43,27 +43,49 @@ class PostCreateFormTests(TestCase):
             data=form_data,
             follow=True
         )
+        last_post = Post.objects.first()
         self.assertRedirects(response, reverse(
             'posts:profile', args=[PostCreateFormTests.user]))
         self.assertEqual(Post.objects.count(), post_count + 1)
-        self.assertTrue(
-            Post.objects.filter(text=form_data['text']).exists()
-        )
+        self.assertEqual(last_post.text, form_data['text'])
+        self.assertEqual(last_post.group, self.group)
+        self.assertEqual(last_post.author, self.user)
 
     def test_post_edit(self):
         """Валидная форма редактирует запись в Post."""
         post_count = Post.objects.count()
         form_data = {
             'text': 'Тестовый отредактированый пост',
+            'group': PostCreateFormTests.group.id
         }
         response = self.authorized_client.post(
             reverse('posts:post_edit', kwargs={'post_id': self.post.pk}),
             data=form_data,
             follow=True
         )
+        last_post = Post.objects.first()
         self.assertRedirects(response, reverse(
             'posts:post_detail', kwargs={'post_id': self.post.pk}))
         self.assertEqual(Post.objects.count(), post_count)
-        self.assertTrue(
-            Post.objects.filter(text=form_data['text']).exists()
+        self.assertEqual(last_post.text, form_data['text'])
+        self.assertEqual(last_post.group, self.group)
+        self.assertEqual(last_post.author, self.user)
+
+    def test_reddirect_guest_client(self):
+        """Проверка неавторизованный пользователь не может опубликовать пост"""
+        form_data = {
+            'text': 'Тестовый новый пост',
+            'group': PostCreateFormTests.group.id
+        }
+        response = self.guest_client.post(
+            reverse('posts:post_edit', kwargs={'post_id': self.post.pk}),
+            data=form_data,
+            follow=True,
+        )
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertRedirects(
+            response,
+            (reverse('users:login')
+             + '?next='
+             + reverse('posts:post_edit', kwargs={'post_id': self.post.pk})),
         )
