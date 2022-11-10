@@ -36,7 +36,7 @@ class PostCreateFormTests(TestCase):
         post_count = Post.objects.count()
         form_data = {
             'text': 'Тестовый новый пост',
-            'group': PostCreateFormTests.group.id
+            'group': self.group.id
         }
         response = self.authorized_client.post(
             reverse('posts:post_create'),
@@ -45,7 +45,7 @@ class PostCreateFormTests(TestCase):
         )
         last_post = Post.objects.first()
         self.assertRedirects(response, reverse(
-            'posts:profile', args=[PostCreateFormTests.user]))
+            'posts:profile', args=[self.user]))
         self.assertEqual(Post.objects.count(), post_count + 1)
         self.assertEqual(last_post.text, form_data['text'])
         self.assertEqual(last_post.group, self.group)
@@ -55,15 +55,17 @@ class PostCreateFormTests(TestCase):
         """Валидная форма редактирует запись в Post."""
         post_count = Post.objects.count()
         form_data = {
+            'id': self.post.pk,
             'text': 'Тестовый отредактированый пост',
-            'group': PostCreateFormTests.group.id
+            'group': self.group.id
         }
         response = self.authorized_client.post(
             reverse('posts:post_edit', kwargs={'post_id': self.post.pk}),
             data=form_data,
             follow=True
         )
-        last_post = Post.objects.first()
+        # last_post = Post.objects.first()
+        last_post = Post.objects.get(id=self.post.pk)
         self.assertRedirects(response, reverse(
             'posts:post_detail', kwargs={'post_id': self.post.pk}))
         self.assertEqual(Post.objects.count(), post_count)
@@ -75,7 +77,7 @@ class PostCreateFormTests(TestCase):
         """Проверка неавторизованный пользователь не может опубликовать пост"""
         form_data = {
             'text': 'Тестовый новый пост',
-            'group': PostCreateFormTests.group.id
+            'group': self.group.id
         }
         response = self.guest_client.post(
             reverse('posts:post_edit', kwargs={'post_id': self.post.pk}),

@@ -7,10 +7,10 @@ from django.urls import reverse
 from posts.models import Group, Post
 
 User = get_user_model()
-TEST_OF_POST: int = 19
+TEST_OF_POST: int = 27
 
 
-class PostPagesTests(TestCase):
+class ViewsTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -22,30 +22,22 @@ class PostPagesTests(TestCase):
         )
         cls.URL_INDEX = reverse('posts:index')
         cls.URL_USER = reverse(
-            'posts:profile', kwargs={'username': 'author'})
+            'posts:profile', kwargs={'username': cls.user.username})
         cls.URL_GROUP = reverse(
-            'posts:group_list', kwargs={'slug': 'test-slug'})
+            'posts:group_list', kwargs={'slug': cls.group.slug})
         cls.URL_CREATE = reverse('posts:post_create')
-
-    def setUp(self):
-        self.guest_client = Client()
-        self.authorized_client = Client()
-        self.authorized_client.force_login(self.user)
-        many_posts: list = []
-        for i in range(TEST_OF_POST):
-            many_posts.append(Post(text=f'Тестовый текст {i}',
-                              group=self.group,
-                              author=self.user))
-        Post.objects.bulk_create(many_posts)
-        self.post = Post.objects.create(
+        cls.guest_client = Client()
+        cls.authorized_client = Client()
+        cls.authorized_client.force_login(cls.user)
+        cls.post = Post.objects.create(
             text='тестовый текст',
-            author=self.user,
-            group=self.group,
+            author=cls.user,
+            group=cls.group,
         )
-        self.URL_POST = reverse(
-            'posts:post_detail', kwargs={'post_id': self.post.id})
-        self.URL_POST_EDIT = reverse(
-            'posts:post_edit', kwargs={'post_id': self.post.id})
+        cls.URL_POST = reverse(
+            'posts:post_detail', kwargs={'post_id': cls.post.id})
+        cls.URL_POST_EDIT = reverse(
+            'posts:post_edit', kwargs={'post_id': cls.post.id})
 
     def test_pages_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
@@ -63,17 +55,9 @@ class PostPagesTests(TestCase):
                 response = self.authorized_client.get(reverse_name)
                 self.assertTemplateUsed(response, template)
 
-    '''def test_index_page_show_correct_context(self):
-        """Шаблон index сформирован с правильным контекстом."""
-        for post in Post.objects.select_related('group'):
-            response = self.authorized_client.get(reverse('posts:index'))
-            self.assertEqual(response.context.get('post'), post)'''
-
     def test_index_page_show_correct_context(self):
         """Шаблон index сформирован с правильным контекстом."""
-        # response = self.authorized_client.get(self.URL_INDEX)
-        # first_object = response.context['page_obj'][0]
-        first_object = Post.objects.get(id=20)
+        first_object = Post.objects.get()
         self.assertEqual(first_object.group, self.post.group)
         self.assertEqual(first_object.text, self.post.text)
         self.assertEqual(first_object.author, self.post.author)
@@ -85,14 +69,9 @@ class PostPagesTests(TestCase):
             text='Тестовый текст проверка как добавился',
             author=self.user,
             group=self.group)
-        response_index = self.authorized_client.get(
-            reverse('posts:index'))
-        response_group = self.authorized_client.get(
-            reverse('posts:group_list',
-                    kwargs={'slug': f'{self.group.slug}'}))
-        response_profile = self.authorized_client.get(
-            reverse('posts:profile',
-                    kwargs={'username': f'{self.user.username}'}))
+        response_index = self.authorized_client.get(self.URL_INDEX)
+        response_group = self.authorized_client.get(self.URL_GROUP)
+        response_profile = self.authorized_client.get(self.URL_USER)
         index = response_index.context['page_obj']
         group = response_group.context['page_obj']
         profile = response_profile.context['page_obj']
@@ -102,18 +81,17 @@ class PostPagesTests(TestCase):
 
     def test_post_detail_page_show_correct_context(self):
         """Шаблон post_detail сформирован с правильным контекстом."""
-        response = self.authorized_client.get(
-            reverse('posts:post_detail', kwargs={'post_id': self.post.id}))
+        response = self.authorized_client.get(self.URL_POST)
         context_post = response.context['post']
-        post_text_0 = {context_post.text: self.post.text,
-                       context_post.group: self.group,
-                       context_post.author: self.user.username}
-        for value, expected in post_text_0.items():
-            self.assertEqual(post_text_0[value], expected)
+        post_text = {context_post.text: self.post.text,
+                     context_post.group: self.group,
+                     context_post.author: self.user.username}
+        for value, expected in post_text.items():
+            self.assertEqual(post_text[value], expected)
 
     def test_post_create_page_show_correct_context(self):
         """Шаблон post_create сформирован с правильным контекстом."""
-        response = self.authorized_client.get(reverse('posts:post_create'))
+        response = self.authorized_client.get(self.URL_CREATE)
         form_fields = {
             'text': forms.fields.CharField,
             'group': forms.fields.ChoiceField}
@@ -122,25 +100,52 @@ class PostPagesTests(TestCase):
                 form_field = response.context.get('form').fields.get(value)
                 self.assertIsInstance(form_field, expected)
 
-    def test_correct_page_context_guest_client(self):
-        '''Проверка количества постов на первой и второй страницах. '''
-        pages: tuple = (reverse('posts:index'),
-                        reverse('posts:profile',
-                                kwargs={'username': f'{self.user.username}'}),
-                        reverse('posts:group_list',
-                                kwargs={'slug': f'{self.group.slug}'}))
+
+class PaginatorTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = User.objects.create_user(username='author')
+        cls.group = Group.objects.create(
+            title='Тестовая группа',
+            slug='test-slug',
+            description='тестовое описание группы'
+        )
+        cls.guest_client = Client()
+        cls.posts = Post.objects.bulk_create(
+            [
+                Post(
+                    text='тестовый текст ' + str(i),
+                    author=cls.user,
+                    group=cls.group,
+                )
+                for i in range(TEST_OF_POST)
+            ]
+        )
+        cls.URL_INDEX = reverse('posts:index')
+        cls.URL_USER = reverse(
+            'posts:profile', kwargs={'username': cls.user.username})
+        cls.URL_GROUP = reverse(
+            'posts:group_list', kwargs={'slug': cls.group.slug})
+
+    def test_correct_page_paginator(self):
+        '''Проверка количества постов на первой и последней страницах. '''
+        pages_rest = TEST_OF_POST % settings.POSTS_IN_PAGE
+        pages = (self.URL_INDEX,
+                 self.URL_USER,
+                 self.URL_GROUP)
         for page in pages:
             response1 = self.guest_client.get(page)
-            response2 = self.guest_client.get(page + '?page=2')
+            response2 = self.guest_client.get(page + f'?page={pages_rest}')
             count_posts1 = len(response1.context['page_obj'])
-            count_posts2 = len(response2.context['page_obj']) - 1
+            count_posts2 = len(response2.context['page_obj'])
             error_name1 = (f'Ошибка: {count_posts1} постов,'
                            f' должно {settings.POSTS_IN_PAGE}')
             error_name2 = (f'Ошибка: {count_posts2} постов,'
-                           f'должно {TEST_OF_POST -settings.POSTS_IN_PAGE}')
+                           f'должно {pages_rest}')
             self.assertEqual(count_posts1,
                              settings.POSTS_IN_PAGE,
                              error_name1)
             self.assertEqual(count_posts2,
-                             TEST_OF_POST - settings.POSTS_IN_PAGE,
+                             TEST_OF_POST % settings.POSTS_IN_PAGE,
                              error_name2)
