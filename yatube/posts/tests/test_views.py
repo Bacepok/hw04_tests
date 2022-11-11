@@ -7,7 +7,7 @@ from django.urls import reverse
 from posts.models import Group, Post
 
 User = get_user_model()
-TEST_OF_POST: int = 27
+POST_COUTN_FOR_TEST: int = 27
 
 
 class ViewsTests(TestCase):
@@ -57,7 +57,8 @@ class ViewsTests(TestCase):
 
     def test_index_page_show_correct_context(self):
         """Шаблон index сформирован с правильным контекстом."""
-        first_object = Post.objects.get()
+        response = self.authorized_client.get(self.URL_INDEX)
+        first_object = response.context['page_obj'][0]
         self.assertEqual(first_object.group, self.post.group)
         self.assertEqual(first_object.text, self.post.text)
         self.assertEqual(first_object.author, self.post.author)
@@ -65,19 +66,15 @@ class ViewsTests(TestCase):
 
     def test_post_added_correctly(self):
         """Пост при создании добавлен корректно"""
-        post = Post.objects.create(
-            text='Тестовый текст проверка как добавился',
-            author=self.user,
-            group=self.group)
         response_index = self.authorized_client.get(self.URL_INDEX)
         response_group = self.authorized_client.get(self.URL_GROUP)
         response_profile = self.authorized_client.get(self.URL_USER)
         index = response_index.context['page_obj']
         group = response_group.context['page_obj']
         profile = response_profile.context['page_obj']
-        self.assertIn(post, index, 'поста нет на главной')
-        self.assertIn(post, group, 'поста нет в профиле')
-        self.assertIn(post, profile, 'поста нет в группе')
+        self.assertIn(self.post, index, 'поста нет на главной')
+        self.assertIn(self.post, group, 'поста нет в профиле')
+        self.assertIn(self.post, profile, 'поста нет в группе')
 
     def test_post_detail_page_show_correct_context(self):
         """Шаблон post_detail сформирован с правильным контекстом."""
@@ -119,7 +116,7 @@ class PaginatorTests(TestCase):
                     author=cls.user,
                     group=cls.group,
                 )
-                for i in range(TEST_OF_POST)
+                for i in range(POST_COUTN_FOR_TEST)
             ]
         )
         cls.URL_INDEX = reverse('posts:index')
@@ -130,7 +127,7 @@ class PaginatorTests(TestCase):
 
     def test_correct_page_paginator(self):
         '''Проверка количества постов на первой и последней страницах. '''
-        pages_rest = TEST_OF_POST % settings.POSTS_IN_PAGE
+        pages_rest = POST_COUTN_FOR_TEST % settings.POSTS_IN_PAGE
         pages = (self.URL_INDEX,
                  self.URL_USER,
                  self.URL_GROUP)
@@ -143,9 +140,5 @@ class PaginatorTests(TestCase):
                            f' должно {settings.POSTS_IN_PAGE}')
             error_name2 = (f'Ошибка: {count_posts2} постов,'
                            f'должно {pages_rest}')
-            self.assertEqual(count_posts1,
-                             settings.POSTS_IN_PAGE,
-                             error_name1)
-            self.assertEqual(count_posts2,
-                             TEST_OF_POST % settings.POSTS_IN_PAGE,
-                             error_name2)
+            self.assertEqual(count_posts1, settings.POSTS_IN_PAGE, error_name1)
+            self.assertEqual(count_posts2, pages_rest, error_name2)

@@ -64,7 +64,6 @@ class PostCreateFormTests(TestCase):
             data=form_data,
             follow=True
         )
-        # last_post = Post.objects.first()
         last_post = Post.objects.get(id=self.post.pk)
         self.assertRedirects(response, reverse(
             'posts:post_detail', kwargs={'post_id': self.post.pk}))
@@ -73,8 +72,8 @@ class PostCreateFormTests(TestCase):
         self.assertEqual(last_post.group, self.group)
         self.assertEqual(last_post.author, self.user)
 
-    def test_reddirect_guest_client(self):
-        """Проверка неавторизованный пользователь не может опубликовать пост"""
+    def test_redirect_guest_client(self):
+        """Неавторизованный пользователь не может редактировать пост"""
         form_data = {
             'text': 'Тестовый новый пост',
             'group': self.group.id
